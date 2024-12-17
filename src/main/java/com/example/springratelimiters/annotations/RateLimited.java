@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface RateLimited {
     /**
-     * cache key
+     * cache key, request header dan alınacak value
      */
     String value();
 
