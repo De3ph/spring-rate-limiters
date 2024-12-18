@@ -1,3 +1,10 @@
 spring:
   application:
     name: spring-rate-limiters
+
+resilience4j.ratelimiter:
+  instances:
+    foo:
+      limitForPeriod: 3
+      limitRefreshPeriod: 1m
+      timeoutDuration: 0
