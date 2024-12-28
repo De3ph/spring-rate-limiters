@@ -1,23 +1,27 @@
 package com.example.springratelimiters.service;
 
+import com.example.springratelimiters.service.intf.RateLimitService;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.local.LocalBucketBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import static com.example.springratelimiters.constants.Bucket4J.*;
 
 @Component
+@Slf4j
+@RequiredArgsConstructor
 public class RateLimitServiceImpl implements RateLimitService<String> {
-    private static final Logger log = LoggerFactory.getLogger(RateLimitServiceImpl.class);
-
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final LettuceBasedProxyManager lettuceBasedProxyManager;
 
     private static final Bandwidth bandwidth = Bandwidth
             .builder()
@@ -25,8 +29,20 @@ public class RateLimitServiceImpl implements RateLimitService<String> {
             .refillIntervally(REFILL_COUNT, Duration.ofMinutes(REFILL_PERIOD_IN_MINUTES))
             .build();
 
+    private Supplier<BucketConfiguration> getConfigSupplier() {
+        return () -> BucketConfiguration.builder().addLimit(bandwidth).build();
+    }
+
+    private Bucket resolveBucket(String key) {
+        Supplier<BucketConfiguration> configSupplier = getConfigSupplier();
+
+        return lettuceBasedProxyManager.builder().build(key, configSupplier);
+    }
+
+
+    @Override
     public boolean tryConsume(String key) {
-        Bucket bucket = buckets.computeIfAbsent(key, this::newBucket);
+        Bucket bucket = resolveBucket(key);
 
         if (bucket.tryConsume(1)) {
             return true;
@@ -35,10 +51,6 @@ public class RateLimitServiceImpl implements RateLimitService<String> {
             return false;
         }
 
-    }
-
-    private Bucket newBucket(String key) {
-        return new LocalBucketBuilder().addLimit(bandwidth).build();
     }
 
 }
